@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { User, KeyRound, Save, Trash2, Users, Edit, PlusCircle, Send, Link as LinkIcon, Copy, Loader2, Upload, MessageSquare } from 'lucide-react';
+import { User, KeyRound, Save, Trash2, Users, Edit, PlusCircle, Send, Link as LinkIcon, Copy, Loader2, Upload, MessageSquare, Sparkles, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 const Settings = () => {
   const [apiKey, setApiKey] = useState('');
@@ -19,6 +20,11 @@ const Settings = () => {
   const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState(null); // 'saved' | 'valid' | 'invalid' | null
   const [savedKeyPreview, setSavedKeyPreview] = useState(''); // Preview da chave salva
+  const [openrouterApiKey, setOpenrouterApiKey] = useState('');
+  const [isSavingOpenrouterKey, setIsSavingOpenrouterKey] = useState(false);
+  const [isValidatingOpenrouterKey, setIsValidatingOpenrouterKey] = useState(false);
+  const [openrouterKeyStatus, setOpenrouterKeyStatus] = useState(null);
+  const [savedOpenrouterPreview, setSavedOpenrouterPreview] = useState('');
   const [users, setUsers] = useState([]);
   const [inviteLinks, setInviteLinks] = useState([]);
   const [isInviteDialogOpen, setInviteDialogOpen] = useState(false);
@@ -115,6 +121,53 @@ const Settings = () => {
     }
   }, [apiKey, toast]);
 
+  const validateOpenrouterKey = useCallback(async (keyToValidate = null) => {
+    setIsValidatingOpenrouterKey(true);
+    const key = keyToValidate || openrouterApiKey;
+
+    if (!key) {
+      setIsValidatingOpenrouterKey(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/models', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${key}`,
+        },
+      });
+
+      if (response.ok) {
+        setOpenrouterKeyStatus('valid');
+        if (keyToValidate) {
+          toast({
+            title: 'Chave OpenRouter válida!',
+            description: 'A chave está salva e a API respondeu corretamente.',
+            duration: 3000,
+          });
+        }
+      } else if (response.status === 401 || response.status === 403) {
+        setOpenrouterKeyStatus('invalid');
+        if (keyToValidate) {
+          toast({
+            title: 'Chave OpenRouter inválida',
+            description: 'Atualize a chave em openrouter.ai/keys.',
+            variant: 'destructive',
+            duration: 5000,
+          });
+        }
+      } else {
+        setOpenrouterKeyStatus('saved');
+      }
+    } catch (error) {
+      console.error('Error validating OpenRouter key:', error);
+      setOpenrouterKeyStatus('saved');
+    } finally {
+      setIsValidatingOpenrouterKey(false);
+    }
+  }, [openrouterApiKey, toast]);
+
   const checkSavedKey = useCallback(async () => {
     if (profile?.role !== 'superadmin') return;
     
@@ -150,12 +203,46 @@ const Settings = () => {
     }
   }, [profile?.role, validateKey]);
 
-  // Carrega a chave salva quando o perfil é carregado
+  const checkSavedOpenrouterKey = useCallback(async () => {
+    if (profile?.role !== 'superadmin') return;
+
+    try {
+      const { data, error } = await supabase.rpc('get_encrypted_secret', {
+        p_secret_name: 'OPENROUTER_API_KEY',
+      });
+
+      if (error) {
+        setOpenrouterKeyStatus(null);
+        setSavedOpenrouterPreview('');
+        return;
+      }
+
+      if (data) {
+        const preview =
+          data.length > 20
+            ? `${data.substring(0, 4)}...${data.substring(data.length - 4)}`
+            : '****';
+        setSavedOpenrouterPreview(preview);
+        setOpenrouterKeyStatus('saved');
+        await validateOpenrouterKey(data);
+      } else {
+        setOpenrouterKeyStatus(null);
+        setSavedOpenrouterPreview('');
+      }
+    } catch (error) {
+      console.error('Error checking saved OpenRouter key:', error);
+      setOpenrouterKeyStatus(null);
+      setSavedOpenrouterPreview('');
+    }
+  }, [profile?.role, validateOpenrouterKey]);
+
+  // Carrega as chaves salvas quando o perfil é carregado
   useEffect(() => {
     if (profile?.role === 'superadmin') {
       checkSavedKey();
+      checkSavedOpenrouterKey();
     }
-  }, [profile?.role, checkSavedKey]);
+  }, [profile?.role, checkSavedKey, checkSavedOpenrouterKey]);
 
   const handleUpdateProfile = async () => {
     if (!fullName) {
@@ -260,6 +347,60 @@ const Settings = () => {
       
       // Limpa o campo de input mas mantém o preview
       setApiKey('');
+    }
+  };
+
+  const handleSaveOpenrouterKey = async () => {
+    if (!openrouterApiKey?.trim()) {
+      toast({
+        title: 'Chave inválida',
+        description: 'Insira a chave de API do OpenRouter (sk-or-...).',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (profile?.role !== 'superadmin') {
+      toast({
+        title: 'Acesso negado',
+        description: 'Apenas superadmins podem salvar a chave OpenRouter.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSavingOpenrouterKey(true);
+    const { error } = await supabase.rpc('set_encrypted_secret', {
+      p_secret_name: 'OPENROUTER_API_KEY',
+      p_secret_value: openrouterApiKey.trim(),
+    });
+    setIsSavingOpenrouterKey(false);
+
+    if (error) {
+      let errorMessage = error.message || 'Erro ao salvar a chave OpenRouter.';
+      if (
+        error.message?.includes('Could not find the function') ||
+        (error.message?.includes('function') && error.message?.includes('does not exist'))
+      ) {
+        errorMessage =
+          "Função não encontrada. Execute o SQL de secrets (ex.: supabase_functions_simple.sql) no Supabase.";
+      } else if (error.message?.includes('permission') || error.message?.includes('denied')) {
+        errorMessage = "Sem permissão. Confirme role 'superadmin'.";
+      }
+      toast({
+        title: 'Erro ao salvar OpenRouter',
+        description: errorMessage,
+        variant: 'destructive',
+        duration: 8000,
+      });
+    } else {
+      toast({
+        title: 'Chave OpenRouter salva',
+        description: 'As Edge Functions openrouter-chat e openrouter-image-generation podem usar esta chave.',
+      });
+      await checkSavedOpenrouterKey();
+      await validateOpenrouterKey(openrouterApiKey.trim());
+      setOpenrouterApiKey('');
     }
   };
 
@@ -500,6 +641,173 @@ const Settings = () => {
                       </p>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {isSuperAdmin && (
+              <Card className="dark:bg-gray-800 dark:border-gray-700 border-amber-500/30">
+                <CardHeader>
+                  <div className="flex items-center gap-4">
+                    <Sparkles className="h-8 w-8 text-amber-500" />
+                    <div>
+                      <CardTitle className="text-xl dark:text-white">Integração com OpenRouter</CardTitle>
+                      <CardDescription className="dark:text-gray-400">
+                        Uma chave para vários modelos (via edge functions <code className="text-xs">openrouter-chat</code> /{' '}
+                        <code className="text-xs">openrouter-image-generation</code>).
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="openrouter-api-key" className="dark:text-white">
+                      Chave de API do OpenRouter
+                    </Label>
+                    {savedOpenrouterPreview && openrouterKeyStatus && (
+                      <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-md">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Chave salva:</span>
+                        <code className="text-sm font-mono text-gray-800 dark:text-gray-200">{savedOpenrouterPreview}</code>
+                        {openrouterKeyStatus === 'valid' && (
+                          <span className="ml-auto text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <span className="h-2 w-2 bg-green-500 rounded-full" />
+                            Válida
+                          </span>
+                        )}
+                        {openrouterKeyStatus === 'invalid' && (
+                          <span className="ml-auto text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                            <span className="h-2 w-2 bg-red-500 rounded-full" />
+                            Inválida
+                          </span>
+                        )}
+                        {openrouterKeyStatus === 'saved' && isValidatingOpenrouterKey && (
+                          <span className="ml-auto text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Validando...
+                          </span>
+                        )}
+                        {openrouterKeyStatus === 'saved' && !isValidatingOpenrouterKey && (
+                          <span className="ml-auto text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                            <span className="h-2 w-2 bg-gray-400 rounded-full" />
+                            Salva
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <Input
+                      id="openrouter-api-key"
+                      type="password"
+                      value={openrouterApiKey}
+                      onChange={(e) => setOpenrouterApiKey(e.target.value)}
+                      placeholder={
+                        savedOpenrouterPreview
+                          ? 'Nova chave para substituir'
+                          : 'sk-or-v1-...'
+                      }
+                      className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={handleSaveOpenrouterKey}
+                        disabled={isSavingOpenrouterKey || !openrouterApiKey.trim()}
+                        className="flex-1"
+                      >
+                        {isSavingOpenrouterKey ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="mr-2 h-4 w-4" />
+                        )}
+                        {savedOpenrouterPreview ? 'Atualizar chave OpenRouter' : 'Salvar chave OpenRouter'}
+                      </Button>
+                      {savedOpenrouterPreview && (
+                        <Button
+                          onClick={async () => {
+                            const { data } = await supabase.rpc('get_encrypted_secret', {
+                              p_secret_name: 'OPENROUTER_API_KEY',
+                            });
+                            if (data) await validateOpenrouterKey(data);
+                          }}
+                          disabled={isValidatingOpenrouterKey}
+                          variant="outline"
+                          size="sm"
+                        >
+                          {isValidatingOpenrouterKey ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <KeyRound className="h-4 w-4 mr-2" />
+                              Validar
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <Accordion type="single" collapsible className="w-full rounded-md border border-gray-200 dark:border-gray-600 px-3">
+                    <AccordionItem value="where-used" className="border-0">
+                      <AccordionTrigger className="text-sm dark:text-white py-3 hover:no-underline">
+                        <span className="flex items-center gap-2">
+                          <Info className="h-4 w-4 text-amber-500 shrink-0" />
+                          Onde esta conexão é usada no sistema
+                        </span>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                          O front chama Edge Functions no Supabase; elas leem <code className="text-[11px]">OPENROUTER_API_KEY</code>{' '}
+                          (Vault, igual à OpenAI, ou secret da function no dashboard).
+                        </p>
+                        <div className="space-y-3 text-sm dark:text-gray-300">
+                          <div>
+                            <p className="font-medium text-green-600 dark:text-green-400 text-xs uppercase tracking-wide">
+                              Consomem OpenRouter (openrouter-chat / imagens)
+                            </p>
+                            <ul className="list-disc pl-5 mt-1 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                              <li>
+                                <strong className="text-gray-800 dark:text-gray-200">Assistente</strong> —{' '}
+                                <code className="text-[11px]">/assistant/general</code> (chat geral interno)
+                              </li>
+                              <li>
+                                <strong className="text-gray-800 dark:text-gray-200">Assistente por cliente</strong> —{' '}
+                                <code className="text-[11px]">/assistant/client/:id</code>
+                              </li>
+                              <li>
+                                <strong className="text-gray-800 dark:text-gray-200">Tráfego pago</strong> — assistente no drawer (equipa interna)
+                              </li>
+                              <li>
+                                <strong className="text-gray-800 dark:text-gray-200">Área do cliente</strong> — assistente de tráfego ApexIA (fluxo tráfego)
+                              </li>
+                            </ul>
+                          </div>
+                          <div>
+                            <p className="font-medium text-orange-600 dark:text-orange-400 text-xs uppercase tracking-wide">
+                              Ainda usam OpenAI (openai-chat) — precisam da chave OpenAI
+                            </p>
+                            <ul className="list-disc pl-5 mt-1 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                              <li>
+                                <code className="text-[11px]">/diagnostico</code> (diagnóstico de marketing público)
+                              </li>
+                              <li>
+                                <code className="text-[11px]">/chat/:clientId</code> (chat público ApexIA — parte dos fluxos)
+                              </li>
+                              <li>
+                                <strong>Dashboard</strong> — componente assistente do início (<code className="text-[11px]">/dashboard</code>)
+                              </li>
+                              <li>
+                                <strong>Projetos</strong> — diálogo IA no planejador de campanhas
+                              </li>
+                              <li>
+                                <strong>Super Admin</strong> — templates do diagnóstico (<code className="text-[11px]">/super-admin/diagnostic-templates</code>)
+                              </li>
+                            </ul>
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-500 pt-1">
+                            No chat público do cliente, alguns fluxos podem alternar entre OpenRouter e OpenAI conforme configuração do cliente/modelo.
+                          </p>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 </CardContent>
               </Card>
             )}
