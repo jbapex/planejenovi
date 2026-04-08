@@ -1,0 +1,14 @@
+{
+  "name": "jbapex",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:planeje": "npm run dev -w planeje",
+    "dev:crm": "npm run dev -w crm",
+    "build": "npm run build --workspaces --if-present",
+    "build:planeje": "npm run build -w planeje",
+    "build:crm": "npm run build -w crm"
+  }
+}
