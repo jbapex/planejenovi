@@ -2,7 +2,9 @@
 
 | App | Domínio | Front em produção | Supabase CLI (pasta) | Kong | Postgres | Studio (DNS + Nginx) |
 |-----|---------|-------------------|------------------------|------|----------|----------------------|
-| Planeje | ddplaneje.jbapex.com.br | **Vite estático** em `/var/www/ddplaneje-vite` (Nginx) + snippet Kong | meu-projeto-supabase | 54321 | 54322 | studio-planeje.jbapex.com.br |
+| Planeje | **ddplaneje.jbapex.com.br** e **planeje.jbapex.com.br** (mesmo `server`, mesmo `dist`) | **Vite estático** em `/var/www/ddplaneje-vite` + snippet Kong | meu-projeto-supabase | 54321 | 54322 | studio-planeje.jbapex.com.br |
+
+**DNS:** o registo **A** de `planeje.jbapex.com.br` tem de apontar para o **mesmo IP** desta VPS que `ddplaneje` (ex.: `204.168.217.244`). Se ainda apontar para outro servidor, o site continua no antigo até alterares no registrador.
 | CRM | ddcrm.jbapex.com.br | Next (3001) | segundo-projeto-supabase | 55321 | 55322 | studio-crm.jbapex.com.br |
 
 **DD Planeje (app completa):** usar `deploy/nginx-ddplaneje-static.conf` em `sites-available`. Build: `npm run build -w planeje-vite` com `apps/planeje-vite/.env.production.local` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`). Publicar: `./deploy/publish-planeje-vite.sh`.
