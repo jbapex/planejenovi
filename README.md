@@ -1,22 +1,33 @@
 # jbapex
 
-Monorepo npm workspaces com **DD Planeje** (`apps/planeje`) e **DD CRM** (`apps/crm`). Next.js 16 + Tailwind + Supabase (`@supabase/ssr`).
+Monorepo npm workspaces:
+
+| Pasta | Stack | Notas |
+|--------|--------|--------|
+| `apps/planeje-vite` | React + Vite | **Planeje completo** (UI principal, Supabase, docs, SQL, `supabase/`) |
+| `apps/planeje` | Next.js 16 | Portal SSR leve (Tailwind + `@supabase/ssr`) |
+| `apps/crm` | Next.js 16 | DD CRM |
 
 ## Desenvolvimento
 
 ```bash
 npm install
-npm run dev:planeje   # porta 3000
-npm run dev:crm       # porta 3001
+npm run dev:planeje-vite   # Planeje completo — Vite, porta 3003
+npm run dev:planeje        # Next DD Planeje — porta 3000
+npm run dev:crm            # porta 3001
 ```
 
-Copia `apps/planeje/.env.example` → `.env.local` (e o mesmo para `crm`).
+Ambiente:
+
+- `apps/planeje-vite`: copia `apps/planeje-vite/.env.example` → `.env` na mesma pasta.
+- `apps/planeje` e `apps/crm`: copia cada `.env.example` → `.env.local`.
 
 ## Produção
 
 ```bash
 npm run build
-npm run start -w planeje   # ou systemd — ver deploy/*.service
+npm run preview -w planeje-vite   # ou servir `apps/planeje-vite/dist` com Nginx
+npm run start -w planeje          # Next — ou systemd em `deploy/*.service`
 ```
 
 ## Deploy / VPS

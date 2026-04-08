@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "dev:planeje": "npm run dev -w planeje",
+    "dev:planeje-vite": "npm run dev -w planeje-vite",
     "dev:crm": "npm run dev -w crm",
     "build": "npm run build --workspaces --if-present",
     "build:planeje": "npm run build -w planeje",
+    "build:planeje-vite": "npm run build -w planeje-vite",
     "build:crm": "npm run build -w crm"
   }
 }
